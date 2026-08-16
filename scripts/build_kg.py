@@ -59,12 +59,35 @@ def build_cue_tiers(cue_priority: dict) -> dict[str, str]:
     return tiers
 
 
+def compile_qualifiers(qualifiers: dict) -> dict[str, list[re.Pattern]]:
+    return {
+        name: [re.compile(p, re.I) for p in patterns]
+        for name, patterns in (qualifiers or {}).items()
+    }
+
+
+def match_qualifiers(
+    context: str, compiled: dict[str, list[re.Pattern]]
+) -> dict[str, bool]:
+    """Flags describing a hit, independent of its tier.
+
+    Orthogonal on purpose: a passage can be both 'unproved' and a method gap
+    (Berndt proved it, but not Ramanujan's way), or unproved and *not* one --
+    the latter being the genuinely open case worth surfacing.
+    """
+    return {
+        name: any(p.search(context) for p in patterns)
+        for name, patterns in compiled.items()
+    }
+
+
 def mine_cues(
     markdown: str,
     cues: list[str],
     volume_id: str,
     *,
     cue_tiers: dict[str, str],
+    qualifiers: dict[str, list[re.Pattern]] | None = None,
     window: int = 400,
 ) -> list[dict]:
     hits = []
@@ -95,6 +118,12 @@ def mine_cues(
             chapter_matches = list(re.finditer(r"Chapter\s+(\d+)", before, re.I))
             if chapter_matches:
                 chapter = int(chapter_matches[-1].group(1))
+            # Narrow window: the qualifier ("...by methods familiar to
+            # Ramanujan", "...resorted to modular forms") trails the cue
+            # closely. A wide window would match unrelated prose, since
+            # "theory of modular forms" is common throughout these volumes.
+            qual_context = markdown[max(0, m.start() - 100) : m.end() + 350]
+            flags = match_qualifiers(qual_context, qualifiers or {})
             hits.append(
                 {
                     "volume_id": volume_id,
@@ -103,6 +132,7 @@ def mine_cues(
                     "entry": entry,
                     "cue": cue,
                     "priority": priority,
+                    **flags,
                     "span": markdown[start:end].replace("\n", " ").strip(),
                 }
             )
@@ -422,6 +452,7 @@ def main() -> None:
     seed = load_seed()
     cues = seed.get("mining_cues", [])
     cue_tiers = build_cue_tiers(seed.get("cue_priority", {}))
+    qualifiers = compile_qualifiers(seed.get("qualifiers", {}))
     mined: list[dict] = []
 
     for vol_dir in sorted(PARSED.glob("part-*")):
@@ -430,7 +461,9 @@ def main() -> None:
             console.print(f"[yellow]no markdown yet[/yellow] {vol_dir.name}")
             continue
         text = md_path.read_text(encoding="utf-8", errors="replace")
-        hits = mine_cues(text, cues, vol_dir.name, cue_tiers=cue_tiers)
+        hits = mine_cues(
+            text, cues, vol_dir.name, cue_tiers=cue_tiers, qualifiers=qualifiers
+        )
         if len(hits) > args.max_hits_per_volume:
             dropped = len(hits) - args.max_hits_per_volume
             console.print(

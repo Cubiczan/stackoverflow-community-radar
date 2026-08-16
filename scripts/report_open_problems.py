@@ -73,6 +73,7 @@ def cluster(hits: list[dict]) -> list[dict]:
         if h["span"] not in b["spans"]:
             b["spans"].append(h["span"])
         b["chapter"] = b["chapter"] or h.get("chapter")
+        b["method_gap"] = b.get("method_gap") or bool(h.get("method_gap"))
     return sorted(
         buckets.values(),
         key=lambda b: (b["volume_id"], b["page"] or 0),
@@ -97,6 +98,13 @@ def render(tier_key: str, title: str, blurb: str, clusters: list[dict]) -> list[
             lines.append(f"#### {where}")
             lines.append("")
             lines.append(f"Cues: {', '.join(f'`{x}`' for x in c['cues'])}")
+            if c.get("method_gap"):
+                lines.append("")
+                lines.append(
+                    "**Method gap** — Berndt proved this, but not by means available "
+                    "to Ramanujan. Open question is a proof in Ramanujan's style, "
+                    "not the result itself."
+                )
             lines.append("")
 
             formulas = extract_formulas(c["spans"][0])

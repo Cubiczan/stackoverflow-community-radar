@@ -244,6 +244,24 @@ SEED = {
             "remains open",
         ],
     },
+    # Orthogonal to cue_priority. A "method gap" is a result Berndt DID prove,
+    # but only with machinery unavailable to Ramanujan -- so it is not an open
+    # problem in the usual sense, it is an open question about method. Reading
+    # the passages showed 6 of 7 "unable to prove" hits are of this kind, which
+    # is why this is a flag rather than a tier: a hit can be unproved AND a
+    # method gap, or unproved and NOT one (the interesting case).
+    "qualifiers": {
+        "method_gap": [
+            r"method[s]? (?:familiar|known|available) to Ramanujan",
+            r"ideas known to Ramanujan",
+            r"classical method[s]?",
+            r"classical theory",
+            r"in the spirit of Ramanujan",
+            r"theory of modular forms",
+            r"resort(?:ed|ing)? to",
+            r"we cannot otherwise prove",
+        ],
+    },
 }
 
 
