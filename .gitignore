@@ -7,7 +7,7 @@ __pycache__/
 .mypy_cache/
 data/parsed/
 data/index/
-data/kg/
+data/kg/*
 .sofa/
 *.pdf
 *.log
