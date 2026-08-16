@@ -9,6 +9,7 @@ We additionally pull answers=0 and tagged:ramanujan for research intake.
 from __future__ import annotations
 
 import json
+import os
 import re
 import ssl
 import urllib.parse
@@ -16,8 +17,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "kg" / "mo_unanswered_ramanujan.json"
+load_dotenv(ROOT / ".env")
 
 # Prefer threads that look like open formula / meaning / proof problems
 PRIORITY_PATTERNS = [
@@ -51,12 +55,35 @@ NOISE_PATTERNS = [
 ]
 
 
+def _tls_context() -> ssl.SSLContext:
+    """Verified TLS context.
+
+    This machine's system CA bundle is expired, which makes stdlib urllib fail
+    against api.stackexchange.com. Fall back to certifi's bundle rather than
+    disabling verification — an unverified context would accept any
+    certificate, including an intercepting proxy's.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError as exc:
+        raise SystemExit(
+            "certifi is required for verified TLS on this machine "
+            "(system CA bundle is expired). Install it: pip install certifi"
+        ) from exc
+
+
 def get(path: str, **params):
     params.setdefault("site", "mathoverflow.net")
     params.setdefault("pagesize", 50)
+    key = os.getenv("STACK_EXCHANGE_KEY") or os.getenv("STACKAPPS_KEY")
+    if key:
+        params.setdefault("key", key)
     url = f"https://api.stackexchange.com/2.3{path}?{urllib.parse.urlencode(params)}"
-    ctx = ssl._create_unverified_context()
-    with urllib.request.urlopen(url, timeout=60, context=ctx) as r:
+    ctx = _tls_context()
+    req = urllib.request.Request(url, headers={"User-Agent": "ramanujan-notebooks-kg/1.0"})
+    with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
         return json.load(r)
 
 
@@ -88,6 +115,12 @@ def slim(it: dict) -> dict:
 
 
 def main() -> None:
+    key = os.getenv("STACK_EXCHANGE_KEY") or os.getenv("STACKAPPS_KEY")
+    if key:
+        print("Using StackApps key from environment")
+    else:
+        print("No STACK_EXCHANGE_KEY — anonymous quota")
+
     zero = get(
         "/search/advanced",
         tagged="ramanujan",
@@ -104,6 +137,11 @@ def main() -> None:
         order="desc",
     )
 
+    # Quota telemetry when present
+    quota = zero.get("quota_remaining")
+    if quota is not None:
+        print(f"SE quota remaining: {quota} / {zero.get('quota_max')}")
+
     zero_items = [slim(it) for it in zero.get("items", [])]
     noacc_items = [slim(it) for it in no_accepted.get("items", [])]
     zero_items.sort(key=lambda x: (-x["relevance"], -x["score"]))
@@ -118,6 +156,8 @@ def main() -> None:
             "MO /unanswered is site-wide. This file is the Ramanujan-tagged subset "
             "for KG intake, ranked toward open formula / meaning questions."
         ),
+        "api_key_used": bool(key),
+        "quota_remaining": quota,
         "curated_for_kg": curated,
         "tagged_ramanujan_zero_answers": zero_items,
         "tagged_ramanujan_no_accepted": noacc_items,
