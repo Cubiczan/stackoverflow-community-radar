@@ -13,3 +13,8 @@ data/kg/
 *.log
 .DS_Store
 Thumbs.db
+
+# Track the human-readable findings, not the regenerable graph data
+!data/kg/OPEN_PROBLEMS.md
+!data/kg/proof_sketches/
+!data/kg/proof_sketches/**
