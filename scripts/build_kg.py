@@ -40,12 +40,31 @@ def load_json(path: Path) -> dict | list | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# Ranked tiers, most research value first. Drives sorting and truncation.
+PRIORITY_ORDER = ["meaning_gap", "unproved_or_incorrect", "other"]
+
+
+def build_cue_tiers(cue_priority: dict) -> dict[str, str]:
+    """Map lowercased cue -> tier name from the seed's cue_priority block.
+
+    Every tier the seed declares is honoured. Collapsing unlisted tiers into
+    'other' would pool real signal ('unable to prove', 'unproved') with noise
+    cues like 'incomplete', which matches 'incomplete elliptic integral' far
+    more often than an incomplete proof.
+    """
+    tiers: dict[str, str] = {}
+    for tier, tier_cues in cue_priority.items():
+        for cue in tier_cues:
+            tiers[cue.lower()] = tier
+    return tiers
+
+
 def mine_cues(
     markdown: str,
     cues: list[str],
     volume_id: str,
     *,
-    meaning_cues: set[str],
+    cue_tiers: dict[str, str],
     window: int = 400,
 ) -> list[dict]:
     hits = []
@@ -58,7 +77,7 @@ def mine_cues(
             page_m = list(re.finditer(r"<!-- page (\d+) -->", markdown[: m.start()]))
             if page_m:
                 page = int(page_m[-1].group(1))
-            priority = "meaning_gap" if cue.lower() in {c.lower() for c in meaning_cues} else "other"
+            priority = cue_tiers.get(cue.lower(), "other")
             # Best-effort Entry / Chapter anchors: prefer the last Entry
             # heading that appears before the cue (not an earlier chapter).
             before = markdown[max(0, m.start() - 2500) : m.start()]
@@ -87,7 +106,8 @@ def mine_cues(
                     "span": markdown[start:end].replace("\n", " ").strip(),
                 }
             )
-    hits.sort(key=lambda h: (0 if h["priority"] == "meaning_gap" else 1, h.get("page") or 0))
+    rank = {tier: i for i, tier in enumerate(PRIORITY_ORDER)}
+    hits.sort(key=lambda h: (rank.get(h["priority"], len(rank)), h.get("page") or 0))
     return hits
 
 
@@ -401,7 +421,7 @@ def main() -> None:
 
     seed = load_seed()
     cues = seed.get("mining_cues", [])
-    meaning_cues = set(seed.get("cue_priority", {}).get("meaning_gap", []))
+    cue_tiers = build_cue_tiers(seed.get("cue_priority", {}))
     mined: list[dict] = []
 
     for vol_dir in sorted(PARSED.glob("part-*")):
@@ -410,11 +430,20 @@ def main() -> None:
             console.print(f"[yellow]no markdown yet[/yellow] {vol_dir.name}")
             continue
         text = md_path.read_text(encoding="utf-8", errors="replace")
-        hits = mine_cues(text, cues, vol_dir.name, meaning_cues=meaning_cues)
+        hits = mine_cues(text, cues, vol_dir.name, cue_tiers=cue_tiers)
         if len(hits) > args.max_hits_per_volume:
+            dropped = len(hits) - args.max_hits_per_volume
+            console.print(
+                f"[yellow]{vol_dir.name}: dropping {dropped} lowest-tier hits "
+                f"(cap {args.max_hits_per_volume})[/yellow]"
+            )
             hits = hits[: args.max_hits_per_volume]
         meaning_n = sum(1 for h in hits if h.get("priority") == "meaning_gap")
-        console.print(f"{vol_dir.name}: {len(hits)} hits ({meaning_n} meaning-gap)")
+        unproved_n = sum(1 for h in hits if h.get("priority") == "unproved_or_incorrect")
+        console.print(
+            f"{vol_dir.name}: {len(hits)} hits "
+            f"({meaning_n} meaning-gap, {unproved_n} unproved)"
+        )
         mined.extend(hits)
 
     curated = dedupe_meaning_gaps(mined)
