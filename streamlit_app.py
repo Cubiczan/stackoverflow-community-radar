@@ -22,6 +22,14 @@ def main() -> None:
         page_size = st.slider("Questions", min_value=5, max_value=100, value=30, step=5)
         refresh = st.button("Refresh")
 
+        st.divider()
+        st.subheader("About")
+        st.write(
+            "This dashboard ranks unanswered questions, groups them by tags, and drafts answer briefs. "
+            "Use sample mode for offline demos or live mode when Stack Exchange credentials are available."
+        )
+        st.write("The ranking is deterministic so the same input questions produce the same queue.")
+
     if refresh:
         st.rerun()
 
