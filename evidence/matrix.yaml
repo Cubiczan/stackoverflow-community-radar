@@ -50,7 +50,7 @@ claims:
     source: "README.md#dashboard"
     evidence:
       - type: script
-        ref: "scripts/check_streamlit_entrypoint.py"
+        ref: "scripts/check_streamlit_entrypoint_RENAMED.py"
         timeout_seconds: 120
 
   - id: C006
