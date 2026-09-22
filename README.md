@@ -70,3 +70,12 @@ The dashboard shows:
 - The app falls back to bundled sample questions if the API is unavailable.
 - The repo is safe to use offline for development and demos.
 - The core logic is deterministic so the sample mode can be tested without network access.
+
+## Evidence matrix
+
+Every capability claim in this file is backed by `evidence/matrix.yaml`; CI
+refuses builds while any row is unverifiable. The fail-closed verifier
+(`tools/verify_evidence_matrix.py`, vendored byte-identical from the
+`consensus-hardening-protocol` standard kit, `EVIDENCE_MATRIX_VERIFIER_VERSION`
+1.0.0) runs before any install step on every pull request and on pushes to
+`main`.
